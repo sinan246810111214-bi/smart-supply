@@ -8,12 +8,46 @@ import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { Product, Order, AdminSettings } from "./src/types";
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  collection, 
+  getDocs, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  deleteDoc,
+  updateDoc
+} from "firebase/firestore";
 
 const app = express();
 const PORT = 3000;
 
 // Body parsing
 app.use(express.json());
+
+// Firebase configuration loading from firebase-applet-config.json
+const CONFIG_FILE = path.join(process.cwd(), "firebase-applet-config.json");
+let firebaseAppConfig: any = null;
+if (fs.existsSync(CONFIG_FILE)) {
+  try {
+    firebaseAppConfig = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+  } catch (err) {
+    console.error("Error reading firebase-applet-config.json:", err);
+  }
+}
+
+const firebaseApp = initializeApp(firebaseAppConfig || {
+  projectId: "smartsupply-ee2a9",
+  appId: "1:710761655183:web:32c24f45984710febc39fa",
+  apiKey: "AIzaSyDNcEW7nf3zd3_OTFidWpXBbNYcxoOJCbE",
+  authDomain: "smartsupply-ee2a9.firebaseapp.com",
+  storageBucket: "smartsupply-ee2a9.firebasestorage.app",
+  messagingSenderId: "710761655183"
+});
+
+const dbId = firebaseAppConfig?.firestoreDatabaseId || "(default)";
+const firestoreDb = getFirestore(firebaseApp, dbId);
 
 // Database file paths
 const DATA_DIR = path.join(process.cwd(), "data");
@@ -102,76 +136,155 @@ const DEFAULT_PRODUCTS: Product[] = [
   }
 ];
 
-// Helper functions to load/save JSON data
-function loadProducts(): Product[] {
+// Helper functions to load/save data from Firestore with local file backup/fallback
+async function loadProducts(): Promise<Product[]> {
   try {
-    if (!fs.existsSync(PRODUCTS_FILE)) {
-      fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(DEFAULT_PRODUCTS, null, 2));
+    const colRef = collection(firestoreDb, "products");
+    const snapshot = await getDocs(colRef);
+    if (snapshot.empty) {
+      console.log("[Firestore] Seeding default products to Firestore...");
+      for (const prod of DEFAULT_PRODUCTS) {
+        await setDoc(doc(firestoreDb, "products", prod.id), prod);
+      }
       return DEFAULT_PRODUCTS;
     }
-    const data = fs.readFileSync(PRODUCTS_FILE, "utf-8");
-    return JSON.parse(data);
+    const products: Product[] = [];
+    snapshot.forEach((docSnap) => {
+      products.push(docSnap.data() as Product);
+    });
+    // Sort products so newer IDs or custom order remains consistent
+    return products.sort((a, b) => b.id.localeCompare(a.id));
   } catch (e) {
-    console.error("Error loading products:", e);
-    return DEFAULT_PRODUCTS;
+    console.error("[Firestore] Error loading products:", e);
+    // Local fallback
+    try {
+      if (!fs.existsSync(PRODUCTS_FILE)) {
+        fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(DEFAULT_PRODUCTS, null, 2));
+        return DEFAULT_PRODUCTS;
+      }
+      const data = fs.readFileSync(PRODUCTS_FILE, "utf-8");
+      return JSON.parse(data);
+    } catch (err) {
+      return DEFAULT_PRODUCTS;
+    }
   }
 }
 
-function saveProducts(products: Product[]) {
+async function saveProducts(products: Product[]) {
+  try {
+    // Delete existing products first to keep in sync
+    const colRef = collection(firestoreDb, "products");
+    const snapshot = await getDocs(colRef);
+    for (const docSnap of snapshot.docs) {
+      await deleteDoc(doc(firestoreDb, "products", docSnap.id));
+    }
+    // Save new products
+    for (const prod of products) {
+      await setDoc(doc(firestoreDb, "products", prod.id), prod);
+    }
+  } catch (e) {
+    console.error("[Firestore] Error saving products:", e);
+  }
+  // Local backup
   try {
     fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
-  } catch (e) {
-    console.error("Error saving products:", e);
-  }
+  } catch (e) {}
 }
 
-function loadOrders(): Order[] {
+async function loadOrders(): Promise<Order[]> {
   try {
-    if (!fs.existsSync(ORDERS_FILE)) {
-      fs.writeFileSync(ORDERS_FILE, JSON.stringify([], null, 2));
+    const colRef = collection(firestoreDb, "orders");
+    const snapshot = await getDocs(colRef);
+    const orders: Order[] = [];
+    snapshot.forEach((docSnap) => {
+      orders.push(docSnap.data() as Order);
+    });
+    // Sort by createdAt descending
+    return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  } catch (e) {
+    console.error("[Firestore] Error loading orders:", e);
+    // Local fallback
+    try {
+      if (!fs.existsSync(ORDERS_FILE)) {
+        return [];
+      }
+      const data = fs.readFileSync(ORDERS_FILE, "utf-8");
+      return JSON.parse(data);
+    } catch (err) {
       return [];
     }
-    const data = fs.readFileSync(ORDERS_FILE, "utf-8");
-    return JSON.parse(data);
-  } catch (e) {
-    console.error("Error loading orders:", e);
-    return [];
   }
 }
 
-function saveOrders(orders: Order[]) {
+async function saveOrders(orders: Order[]) {
+  try {
+    for (const order of orders) {
+      await setDoc(doc(firestoreDb, "orders", order.id), order);
+    }
+  } catch (e) {
+    console.error("[Firestore] Error saving orders:", e);
+  }
+  // Local backup
   try {
     fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
-  } catch (e) {
-    console.error("Error saving orders:", e);
-  }
+  } catch (e) {}
 }
 
-function loadSettings(): AdminSettings {
+async function saveOrder(order: Order) {
+  try {
+    await setDoc(doc(firestoreDb, "orders", order.id), order);
+  } catch (e) {
+    console.error("[Firestore] Error saving order:", e);
+  }
+  // Sync backup list
+  try {
+    const orders = await loadOrders();
+    const exists = orders.some(o => o.id === order.id);
+    const updated = exists ? orders.map(o => o.id === order.id ? order : o) : [order, ...orders];
+    fs.writeFileSync(ORDERS_FILE, JSON.stringify(updated, null, 2));
+  } catch (e) {}
+}
+
+async function loadSettings(): Promise<AdminSettings> {
   const defaultSettings: AdminSettings = {
     cloudinaryCloudName: "",
     cloudinaryPreset: "",
     emailNotificationsEnabled: true
   };
   try {
-    if (!fs.existsSync(SETTINGS_FILE)) {
-      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2));
+    const docRef = doc(firestoreDb, "settings", "admin_settings");
+    const docSnap = await getDoc(docRef);
+    if (!docSnap.exists()) {
+      await setDoc(docRef, defaultSettings);
       return defaultSettings;
     }
-    const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
-    return JSON.parse(data);
+    return docSnap.data() as AdminSettings;
   } catch (e) {
-    console.error("Error loading settings:", e);
-    return defaultSettings;
+    console.error("[Firestore] Error loading settings:", e);
+    // Local fallback
+    try {
+      if (!fs.existsSync(SETTINGS_FILE)) {
+        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2));
+        return defaultSettings;
+      }
+      const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
+      return JSON.parse(data);
+    } catch (err) {
+      return defaultSettings;
+    }
   }
 }
 
-function saveSettings(settings: AdminSettings) {
+async function saveSettings(settings: AdminSettings) {
+  try {
+    await setDoc(doc(firestoreDb, "settings", "admin_settings"), settings);
+  } catch (e) {
+    console.error("[Firestore] Error saving settings:", e);
+  }
+  // Local backup
   try {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
-  } catch (e) {
-    console.error("Error saving settings:", e);
-  }
+  } catch (e) {}
 }
 
 // Order Notifications Real-time Stream
@@ -200,17 +313,17 @@ const checkAdmin = (req: express.Request, res: express.Response, next: express.N
 // ---------------- API ROUTES ----------------
 
 // 1. Products API
-app.get("/api/products", (req, res) => {
-  res.json(loadProducts());
+app.get("/api/products", async (req, res) => {
+  res.json(await loadProducts());
 });
 
-app.post("/api/products", checkAdmin, (req, res) => {
+app.post("/api/products", checkAdmin, async (req, res) => {
   const { name, description, price, image, category, status } = req.body;
   if (!name || !price || !category || !status) {
     return res.status(400).json({ error: "Missing required product fields" });
   }
 
-  const products = loadProducts();
+  const products = await loadProducts();
   const newProduct: Product = {
     id: "prod_" + Date.now(),
     name,
@@ -222,15 +335,15 @@ app.post("/api/products", checkAdmin, (req, res) => {
   };
 
   products.unshift(newProduct);
-  saveProducts(products);
+  await saveProducts(products);
   res.status(201).json(newProduct);
 });
 
-app.put("/api/products/:id", checkAdmin, (req, res) => {
+app.put("/api/products/:id", checkAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, description, price, image, category, status } = req.body;
 
-  const products = loadProducts();
+  const products = await loadProducts();
   const index = products.findIndex((p) => p.id === id);
   if (index === -1) {
     return res.status(404).json({ error: "Product not found" });
@@ -246,38 +359,38 @@ app.put("/api/products/:id", checkAdmin, (req, res) => {
     status: status !== undefined ? status : products[index].status
   };
 
-  saveProducts(products);
+  await saveProducts(products);
   res.json(products[index]);
 });
 
-app.delete("/api/products/:id", checkAdmin, (req, res) => {
+app.delete("/api/products/:id", checkAdmin, async (req, res) => {
   const { id } = req.params;
-  const products = loadProducts();
+  const products = await loadProducts();
   const filtered = products.filter((p) => p.id !== id);
 
   if (products.length === filtered.length) {
     return res.status(404).json({ error: "Product not found" });
   }
 
-  saveProducts(filtered);
+  await saveProducts(filtered);
   res.json({ success: true, message: "Product deleted successfully" });
 });
 
-app.post("/api/products/reset", checkAdmin, (req, res) => {
-  saveProducts(DEFAULT_PRODUCTS);
+app.post("/api/products/reset", checkAdmin, async (req, res) => {
+  await saveProducts(DEFAULT_PRODUCTS);
   res.json({ success: true, message: "Products restored to defaults successfully", products: DEFAULT_PRODUCTS });
 });
 
 // 2. Checkout API
-app.post("/api/checkout", (req, res) => {
+app.post("/api/checkout", async (req, res) => {
   const { items, name, phone, pincode, address, notes } = req.body;
 
   if (!items || !items.length || !name || !phone || !pincode || !address) {
     return res.status(400).json({ error: "Missing order details. items, name, phone, pincode, address are required." });
   }
 
-  const orders = loadOrders();
-  const products = loadProducts();
+  const orders = await loadOrders();
+  const products = await loadProducts();
 
   // Validate items & calculate total
   let totalAmount = 0;
@@ -314,7 +427,7 @@ app.post("/api/checkout", (req, res) => {
   };
 
   orders.unshift(newOrder);
-  saveOrders(orders);
+  await saveOrder(newOrder);
 
   // Trigger real-time notifications for active admin dashboards
   notifyClientsOfNewOrder(newOrder);
@@ -369,8 +482,8 @@ SmartSupply Automated System
 });
 
 // 3. Admin Orders API
-app.get("/api/orders", checkAdmin, (req, res) => {
-  let orders = loadOrders();
+app.get("/api/orders", checkAdmin, async (req, res) => {
+  let orders = await loadOrders();
   const { startDate, endDate } = req.query;
 
   if (startDate) {
@@ -388,9 +501,9 @@ app.get("/api/orders", checkAdmin, (req, res) => {
 });
 
 // 4. Client Order Tracking API
-app.get("/api/orders/:id", (req, res) => {
+app.get("/api/orders/:id", async (req, res) => {
   const { id } = req.params;
-  const orders = loadOrders();
+  const orders = await loadOrders();
   const order = orders.find((o) => o.id === id || o.trackingNumber === id);
 
   if (!order) {
@@ -401,11 +514,11 @@ app.get("/api/orders/:id", (req, res) => {
 });
 
 // 5. Update Order / Tracking Details (Admin protected)
-app.put("/api/orders/:id/tracking", checkAdmin, (req, res) => {
+app.put("/api/orders/:id/tracking", checkAdmin, async (req, res) => {
   const { id } = req.params;
   const { name, phone, pincode, address, notes, trackingNumber, trackingStatus } = req.body;
 
-  const orders = loadOrders();
+  const orders = await loadOrders();
   const index = orders.findIndex((o) => o.id === id);
 
   if (index === -1) {
@@ -423,32 +536,35 @@ app.put("/api/orders/:id/tracking", checkAdmin, (req, res) => {
     trackingStatus: trackingStatus !== undefined ? trackingStatus : orders[index].trackingStatus
   };
 
-  saveOrders(orders);
+  await saveOrder(orders[index]);
   res.json(orders[index]);
 });
 
 // Delete Order from Admin Panel (No history retained)
-app.delete("/api/orders/:id", checkAdmin, (req, res) => {
+app.delete("/api/orders/:id", checkAdmin, async (req, res) => {
   const { id } = req.params;
-  const orders = loadOrders();
-  const filtered = orders.filter(o => o.id !== id);
+  try {
+    await deleteDoc(doc(firestoreDb, "orders", id));
+    
+    // Sync backup list
+    const orders = await loadOrders();
+    const filtered = orders.filter(o => o.id !== id);
+    fs.writeFileSync(ORDERS_FILE, JSON.stringify(filtered, null, 2));
 
-  if (orders.length === filtered.length) {
-    return res.status(404).json({ error: "Order not found" });
+    res.json({ success: true, message: "Order removed successfully" });
+  } catch (e) {
+    res.status(500).json({ error: "Failed to delete order" });
   }
-
-  saveOrders(filtered);
-  res.json({ success: true, message: "Order removed successfully" });
 });
 
 // 6. Settings API
-app.get("/api/settings", (req, res) => {
-  res.json(loadSettings());
+app.get("/api/settings", async (req, res) => {
+  res.json(await loadSettings());
 });
 
-app.post("/api/settings", checkAdmin, (req, res) => {
+app.post("/api/settings", checkAdmin, async (req, res) => {
   const { cloudinaryCloudName, cloudinaryPreset, emailNotificationsEnabled } = req.body;
-  const settings = loadSettings();
+  const settings = await loadSettings();
 
   const newSettings = {
     cloudinaryCloudName: cloudinaryCloudName !== undefined ? cloudinaryCloudName : settings.cloudinaryCloudName,
@@ -456,7 +572,7 @@ app.post("/api/settings", checkAdmin, (req, res) => {
     emailNotificationsEnabled: emailNotificationsEnabled !== undefined ? emailNotificationsEnabled : settings.emailNotificationsEnabled
   };
 
-  saveSettings(newSettings);
+  await saveSettings(newSettings);
   res.json(newSettings);
 });
 
@@ -483,9 +599,9 @@ app.get("/api/notifications/stream", (req, res) => {
 
 // Alternate Long Polling/Short Polling endpoint for network failure robustness
 let lastOrderTimes: { [clientId: string]: number } = {};
-app.get("/api/notifications/poll", (req, res) => {
+app.get("/api/notifications/poll", async (req, res) => {
   const { clientId, since } = req.query;
-  const orders = loadOrders();
+  const orders = await loadOrders();
   const querySince = since ? Number(since) : Date.now() - 30000; // default last 30 sec
 
   const newOrders = orders.filter(o => new Date(o.createdAt).getTime() > querySince);
@@ -514,9 +630,13 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`SmartSupply running on http://localhost:${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`SmartSupply running on http://localhost:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
