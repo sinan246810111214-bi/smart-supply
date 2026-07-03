@@ -1,0 +1,6 @@
+{
+  "name": "SmartSupply",
+  "description": "A purple & neon yellow themed full-stack e-commerce web application for electronics and smart kitchen gadgets, featuring secure checkout, order tracking, admin A4 print layout, and notifications with audio alerts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

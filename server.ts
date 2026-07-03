@@ -1,0 +1,522 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import express from "express";
+import path from "path";
+import fs from "fs";
+import { createServer as createViteServer } from "vite";
+import { Product, Order, AdminSettings } from "./src/types";
+
+const app = express();
+const PORT = 3000;
+
+// Body parsing
+app.use(express.json());
+
+// Database file paths
+const DATA_DIR = path.join(process.cwd(), "data");
+const PRODUCTS_FILE = path.join(DATA_DIR, "products.json");
+const ORDERS_FILE = path.join(DATA_DIR, "orders.json");
+const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Initial default products
+const DEFAULT_PRODUCTS: Product[] = [
+  {
+    id: "prod_1",
+    name: "Smart 4-in-1 Wireless Charging Dock",
+    description: "Fast wireless charger for smartphones, smartwatches, and wireless earbuds. Features elegant ambient LED indicator and temperature control safeguards.",
+    price: 1499,
+    image: "https://images.unsplash.com/photo-1622445262465-2481c4574875?w=500&auto=format&fit=crop&q=60",
+    category: "electronics",
+    status: "hot_sale"
+  },
+  {
+    id: "prod_2",
+    name: "Submersible Smart Water Bottle Dispenser",
+    description: "USB rechargeable automatic drinking water pump. Fits standard 20L jars, features dynamic touch sensory dispensing button.",
+    price: 699,
+    image: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=500&auto=format&fit=crop&q=60",
+    category: "kitchen",
+    status: "hot_sale"
+  },
+  {
+    id: "prod_3",
+    name: "Deep Bass Portable Bluetooth Speaker",
+    description: "IPX7 waterproof wireless speaker with dual passive radiators, 15W sound blast output, and up to 12 hours of rich musical playback.",
+    price: 2499,
+    image: "https://images.unsplash.com/photo-1608043152269-423dbba4e7e1?w=500&auto=format&fit=crop&q=60",
+    category: "electronics",
+    status: "stock_in"
+  },
+  {
+    id: "prod_4",
+    name: "Ultra Precision Digital Kitchen Food Scale",
+    description: "High-accuracy kitchen scale with touch buttons, easy tare function, tempered glass surface, and multiple unit convertor measurements (g, ml, lb, oz).",
+    price: 899,
+    image: "https://images.unsplash.com/photo-1574783756214-4058d414e21e?w=500&auto=format&fit=crop&q=60",
+    category: "kitchen",
+    status: "stock_in"
+  },
+  {
+    id: "prod_5",
+    name: "Noise Cancelling True Wireless Earbuds",
+    description: "Active Noise Cancelling (ANC) stereo sound pods. Crystal-clear call technology, fast type-C charge, and dynamic base drivers.",
+    price: 3999,
+    image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop&q=60",
+    category: "electronics",
+    status: "hot_sale"
+  },
+  {
+    id: "prod_6",
+    name: "Smart Rechargeable Electric Garlic Chopper",
+    description: "Compact wireless onion, pepper, and garlic mincer. Stainless steel sharp blades, one-key activation, 250ml capacity kitchen saver.",
+    price: 499,
+    image: "https://images.unsplash.com/photo-1506368249639-73a05d6f6488?w=500&auto=format&fit=crop&q=60",
+    category: "kitchen",
+    status: "hot_sale"
+  },
+  {
+    id: "prod_7",
+    name: "Full HD Portable Pocket Projector",
+    description: "Micro led cinema projector with dual speakers. Supports 1080p, easily connects to smartphones and laptops for movie nights.",
+    price: 7999,
+    image: "https://images.unsplash.com/photo-1535016120720-40c646be5580?w=500&auto=format&fit=crop&q=60",
+    category: "electronics",
+    status: "stock_out"
+  },
+  {
+    id: "prod_8",
+    name: "Stir-Automate Hands-Free Pan Stirrer",
+    description: "Self-rotating electric saucepan mixer with three-speed vibration gears. Stir soup, curry, and sauces completely hands-free.",
+    price: 1299,
+    image: "https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=500&auto=format&fit=crop&q=60",
+    category: "kitchen",
+    status: "stock_in"
+  }
+];
+
+// Helper functions to load/save JSON data
+function loadProducts(): Product[] {
+  try {
+    if (!fs.existsSync(PRODUCTS_FILE)) {
+      fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(DEFAULT_PRODUCTS, null, 2));
+      return DEFAULT_PRODUCTS;
+    }
+    const data = fs.readFileSync(PRODUCTS_FILE, "utf-8");
+    return JSON.parse(data);
+  } catch (e) {
+    console.error("Error loading products:", e);
+    return DEFAULT_PRODUCTS;
+  }
+}
+
+function saveProducts(products: Product[]) {
+  try {
+    fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
+  } catch (e) {
+    console.error("Error saving products:", e);
+  }
+}
+
+function loadOrders(): Order[] {
+  try {
+    if (!fs.existsSync(ORDERS_FILE)) {
+      fs.writeFileSync(ORDERS_FILE, JSON.stringify([], null, 2));
+      return [];
+    }
+    const data = fs.readFileSync(ORDERS_FILE, "utf-8");
+    return JSON.parse(data);
+  } catch (e) {
+    console.error("Error loading orders:", e);
+    return [];
+  }
+}
+
+function saveOrders(orders: Order[]) {
+  try {
+    fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
+  } catch (e) {
+    console.error("Error saving orders:", e);
+  }
+}
+
+function loadSettings(): AdminSettings {
+  const defaultSettings: AdminSettings = {
+    cloudinaryCloudName: "",
+    cloudinaryPreset: "",
+    emailNotificationsEnabled: true
+  };
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) {
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaultSettings, null, 2));
+      return defaultSettings;
+    }
+    const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
+    return JSON.parse(data);
+  } catch (e) {
+    console.error("Error loading settings:", e);
+    return defaultSettings;
+  }
+}
+
+function saveSettings(settings: AdminSettings) {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
+  } catch (e) {
+    console.error("Error saving settings:", e);
+  }
+}
+
+// Order Notifications Real-time Stream
+let clients: express.Response[] = [];
+
+function notifyClientsOfNewOrder(order: Order) {
+  const message = `data: ${JSON.stringify(order)}\n\n`;
+  clients.forEach((client) => {
+    client.write(message);
+  });
+}
+
+// Mail simulation records
+let emailLogs: Array<{ id: string; to: string; subject: string; body: string; date: string }> = [];
+
+// Middleware to check Admin Password (ss2468)
+const checkAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const adminKey = req.headers["x-admin-key"];
+  if (adminKey === "ss2468") {
+    next();
+  } else {
+    res.status(401).json({ error: "Unauthorized: Invalid Admin Password" });
+  }
+};
+
+// ---------------- API ROUTES ----------------
+
+// 1. Products API
+app.get("/api/products", (req, res) => {
+  res.json(loadProducts());
+});
+
+app.post("/api/products", checkAdmin, (req, res) => {
+  const { name, description, price, image, category, status } = req.body;
+  if (!name || !price || !category || !status) {
+    return res.status(400).json({ error: "Missing required product fields" });
+  }
+
+  const products = loadProducts();
+  const newProduct: Product = {
+    id: "prod_" + Date.now(),
+    name,
+    description: description || "",
+    price: Number(price),
+    image: image || "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500&auto=format&fit=crop&q=60",
+    category,
+    status
+  };
+
+  products.unshift(newProduct);
+  saveProducts(products);
+  res.status(201).json(newProduct);
+});
+
+app.put("/api/products/:id", checkAdmin, (req, res) => {
+  const { id } = req.params;
+  const { name, description, price, image, category, status } = req.body;
+
+  const products = loadProducts();
+  const index = products.findIndex((p) => p.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Product not found" });
+  }
+
+  products[index] = {
+    ...products[index],
+    name: name !== undefined ? name : products[index].name,
+    description: description !== undefined ? description : products[index].description,
+    price: price !== undefined ? Number(price) : products[index].price,
+    image: image !== undefined ? image : products[index].image,
+    category: category !== undefined ? category : products[index].category,
+    status: status !== undefined ? status : products[index].status
+  };
+
+  saveProducts(products);
+  res.json(products[index]);
+});
+
+app.delete("/api/products/:id", checkAdmin, (req, res) => {
+  const { id } = req.params;
+  const products = loadProducts();
+  const filtered = products.filter((p) => p.id !== id);
+
+  if (products.length === filtered.length) {
+    return res.status(404).json({ error: "Product not found" });
+  }
+
+  saveProducts(filtered);
+  res.json({ success: true, message: "Product deleted successfully" });
+});
+
+app.post("/api/products/reset", checkAdmin, (req, res) => {
+  saveProducts(DEFAULT_PRODUCTS);
+  res.json({ success: true, message: "Products restored to defaults successfully", products: DEFAULT_PRODUCTS });
+});
+
+// 2. Checkout API
+app.post("/api/checkout", (req, res) => {
+  const { items, name, phone, pincode, address, notes } = req.body;
+
+  if (!items || !items.length || !name || !phone || !pincode || !address) {
+    return res.status(400).json({ error: "Missing order details. items, name, phone, pincode, address are required." });
+  }
+
+  const orders = loadOrders();
+  const products = loadProducts();
+
+  // Validate items & calculate total
+  let totalAmount = 0;
+  const orderItems = items.map((item: any) => {
+    const product = products.find((p) => p.id === item.productId);
+    const price = product ? product.price : item.price || 0;
+    const productName = product ? product.name : item.productName || "Unknown Item";
+    totalAmount += price * item.quantity;
+    return {
+      productId: item.productId,
+      productName,
+      quantity: item.quantity,
+      price
+    };
+  });
+
+  // India Post Tracking Number Template (e.g., IN202612345IN)
+  const randomNum = Math.floor(10000000 + Math.random() * 90000000);
+  const trackingNumber = `IN${randomNum}IN`;
+
+  const newOrder: Order = {
+    id: "ord_" + Math.floor(1000 + Math.random() * 9000),
+    items: orderItems,
+    totalAmount,
+    name,
+    phone,
+    pincode,
+    address,
+    trackingNumber,
+    trackingStatus: "booked",
+    createdAt: new Date().toISOString(),
+    notes: notes || "",
+    emailSent: true
+  };
+
+  orders.unshift(newOrder);
+  saveOrders(orders);
+
+  // Trigger real-time notifications for active admin dashboards
+  notifyClientsOfNewOrder(newOrder);
+
+  // Trigger simulated email notification dispatch
+  const emailBody = `
+Dear SmartSupply Admin,
+
+A new order has been placed on your website!
+
+------------------------------------------
+ORDER SUMMARY (Order ID: ${newOrder.id})
+------------------------------------------
+Date: ${new Date(newOrder.createdAt).toLocaleDateString()}
+Total: ₹${newOrder.totalAmount.toLocaleString()}
+
+CUSTOMER SHIPPING DETAILS:
+Name: ${newOrder.name}
+Phone: ${newOrder.phone}
+Pincode: ${newOrder.pincode}
+Address: ${newOrder.address}
+
+ITEMS ORDERED:
+${newOrder.items.map(item => `- ${item.productName} (Qty: ${item.quantity}) - Price: ₹${item.price}`).join("\n")}
+
+INDIA POST TRACKING NUMBER:
+${newOrder.trackingNumber}
+
+PACKER INSTRUCTIONS:
+Please generate the shipping label from the SmartSupply Admin Panel. This order supports printing in A4 layout (5 labels per sheet).
+
+Regards,
+SmartSupply Automated System
+  `;
+
+  // Log to in-memory simulated email box
+  emailLogs.unshift({
+    id: "mail_" + Date.now(),
+    to: "smartsupply36@gmail.com",
+    subject: `[New Order Alert] Order ID: ${newOrder.id} - ₹${newOrder.totalAmount}`,
+    body: emailBody,
+    date: new Date().toISOString()
+  });
+
+  console.log(`[Email Dispatch] Email dispatched to smartsupply36@gmail.com for Order ${newOrder.id}`);
+
+  res.status(201).json({
+    success: true,
+    message: "Order placed successfully",
+    order: newOrder
+  });
+});
+
+// 3. Admin Orders API
+app.get("/api/orders", checkAdmin, (req, res) => {
+  let orders = loadOrders();
+  const { startDate, endDate } = req.query;
+
+  if (startDate) {
+    const start = new Date(startDate as string);
+    orders = orders.filter(o => new Date(o.createdAt) >= start);
+  }
+  if (endDate) {
+    const end = new Date(endDate as string);
+    // Add 23:59:59 to make end date inclusive
+    end.setHours(23, 59, 59, 999);
+    orders = orders.filter(o => new Date(o.createdAt) <= end);
+  }
+
+  res.json(orders);
+});
+
+// 4. Client Order Tracking API
+app.get("/api/orders/:id", (req, res) => {
+  const { id } = req.params;
+  const orders = loadOrders();
+  const order = orders.find((o) => o.id === id || o.trackingNumber === id);
+
+  if (!order) {
+    return res.status(404).json({ error: "Order not found" });
+  }
+
+  res.json(order);
+});
+
+// 5. Update Order / Tracking Details (Admin protected)
+app.put("/api/orders/:id/tracking", checkAdmin, (req, res) => {
+  const { id } = req.params;
+  const { name, phone, pincode, address, notes, trackingNumber, trackingStatus } = req.body;
+
+  const orders = loadOrders();
+  const index = orders.findIndex((o) => o.id === id);
+
+  if (index === -1) {
+    return res.status(404).json({ error: "Order not found" });
+  }
+
+  orders[index] = {
+    ...orders[index],
+    name: name !== undefined ? name : orders[index].name,
+    phone: phone !== undefined ? phone : orders[index].phone,
+    pincode: pincode !== undefined ? pincode : orders[index].pincode,
+    address: address !== undefined ? address : orders[index].address,
+    notes: notes !== undefined ? notes : orders[index].notes,
+    trackingNumber: trackingNumber !== undefined ? trackingNumber : orders[index].trackingNumber,
+    trackingStatus: trackingStatus !== undefined ? trackingStatus : orders[index].trackingStatus
+  };
+
+  saveOrders(orders);
+  res.json(orders[index]);
+});
+
+// Delete Order from Admin Panel (No history retained)
+app.delete("/api/orders/:id", checkAdmin, (req, res) => {
+  const { id } = req.params;
+  const orders = loadOrders();
+  const filtered = orders.filter(o => o.id !== id);
+
+  if (orders.length === filtered.length) {
+    return res.status(404).json({ error: "Order not found" });
+  }
+
+  saveOrders(filtered);
+  res.json({ success: true, message: "Order removed successfully" });
+});
+
+// 6. Settings API
+app.get("/api/settings", (req, res) => {
+  res.json(loadSettings());
+});
+
+app.post("/api/settings", checkAdmin, (req, res) => {
+  const { cloudinaryCloudName, cloudinaryPreset, emailNotificationsEnabled } = req.body;
+  const settings = loadSettings();
+
+  const newSettings = {
+    cloudinaryCloudName: cloudinaryCloudName !== undefined ? cloudinaryCloudName : settings.cloudinaryCloudName,
+    cloudinaryPreset: cloudinaryPreset !== undefined ? cloudinaryPreset : settings.cloudinaryPreset,
+    emailNotificationsEnabled: emailNotificationsEnabled !== undefined ? emailNotificationsEnabled : settings.emailNotificationsEnabled
+  };
+
+  saveSettings(newSettings);
+  res.json(newSettings);
+});
+
+// 7. Simulated Emails logs for SmartSupply Admin
+app.get("/api/admin/emails", checkAdmin, (req, res) => {
+  res.json(emailLogs);
+});
+
+// 8. Server-Sent Events (SSE) stream for Real-time push notifications
+app.get("/api/notifications/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  clients.push(res);
+
+  // Send initial ping to establish connection
+  res.write("data: { \"status\": \"connected\" }\n\n");
+
+  req.on("close", () => {
+    clients = clients.filter((client) => client !== res);
+  });
+});
+
+// Alternate Long Polling/Short Polling endpoint for network failure robustness
+let lastOrderTimes: { [clientId: string]: number } = {};
+app.get("/api/notifications/poll", (req, res) => {
+  const { clientId, since } = req.query;
+  const orders = loadOrders();
+  const querySince = since ? Number(since) : Date.now() - 30000; // default last 30 sec
+
+  const newOrders = orders.filter(o => new Date(o.createdAt).getTime() > querySince);
+  res.json({
+    newOrders,
+    timestamp: Date.now()
+  });
+});
+
+// ------------- VITE DEVELOPMENT / PRODUCTION MIDDLEWARE -------------
+
+async function startServer() {
+  if (process.env.NODE_ENV !== "production") {
+    // Serve with Vite in development
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    // Serve static files in production
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`SmartSupply running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();

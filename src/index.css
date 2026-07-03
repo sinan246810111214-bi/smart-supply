@@ -1,0 +1,203 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Outfit", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  /* Premium White and Yellow Theme Palette */
+  --color-brand-dark: #f8fafc;         /* Crisp off-white page background */
+  --color-brand-purple-dark: #ffffff;  /* Pure white headers & toolbars */
+  --color-brand-card: #ffffff;         /* Pure crisp white cards */
+  --color-brand-border: #e2e8f0;       /* Modern soft slate border */
+  
+  --color-brand-purple: #facc15;       /* Premium Sun Yellow */
+  --color-brand-purple-light: #fef08a; /* Bright Accent Yellow */
+  --color-brand-purple-glow: #fef9c3;  /* Soft Warm Yellow Glow */
+  
+  --color-brand-neon: #eab308;         /* Energetic Bright Yellow */
+  --color-brand-neon-light: #ca8a04;   /* High Contrast Dark Mustard (Perfect for readability) */
+  --color-brand-neon-dark: #854d0e;    /* Rich Bronze / Golden Brown */
+}
+
+/* Custom Global Adjustments for Premium Light White & Yellow Theme */
+
+body {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+
+/* Force text readability in the app's standard layout */
+.text-gray-100 {
+  color: #1e293b !important;
+}
+.text-gray-200 {
+  color: #1e293b !important;
+}
+.text-gray-300 {
+  color: #334155 !important;
+}
+.text-gray-400 {
+  color: #475569 !important;
+}
+.text-gray-500 {
+  color: #64748b !important;
+}
+.text-gray-600 {
+  color: #475569 !important;
+}
+
+/* Ensure white text becomes elegant dark slate on light backgrounds */
+.text-white:not(.bg-brand-neon *, .bg-brand-purple *, .bg-brand-neon-dark *, button *, .bg-red-600 *, .bg-green-600 *, .text-white-keep) {
+  color: #0f172a !important;
+}
+
+/* Headers style overrides */
+h1, h2, h3, h4, h5, h6 {
+  color: #0f172a !important;
+}
+
+/* Specific component fixes for light mode readability */
+.text-brand-neon {
+  color: #ca8a04 !important; /* High contrast gold/mustard for labels */
+}
+.text-brand-neon-light {
+  color: #854d0e !important; /* Rich bronze for light backgrounds */
+}
+
+/* Inputs and forms text readability and styling */
+input, textarea, select {
+  background-color: #ffffff !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+input::placeholder, textarea::placeholder {
+  color: #94a3b8 !important;
+}
+
+/* Modal and container overlays adjustments */
+.bg-brand-dark\/90 {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+}
+.bg-brand-dark\/80 {
+  background-color: rgba(255, 255, 255, 0.88) !important;
+}
+.bg-brand-dark {
+  background-color: #f8fafc !important;
+}
+
+/* Header, navigation background transparent/blur overrides */
+.bg-brand-purple-dark\/80 {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+.bg-brand-purple-dark\/60 {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+}
+.bg-brand-purple-dark\/40 {
+  background-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Color blocks overrides to match yellow scheme */
+.bg-brand-purple\/40 {
+  background-color: rgba(250, 204, 21, 0.25) !important;
+}
+.bg-brand-purple\/20 {
+  background-color: rgba(250, 204, 21, 0.15) !important;
+}
+.bg-brand-purple\/10 {
+  background-color: rgba(250, 204, 21, 0.08) !important;
+}
+.bg-brand-purple\/60 {
+  background-color: rgba(250, 204, 21, 0.45) !important;
+}
+.bg-brand-purple\/95 {
+  background-color: rgba(250, 204, 21, 0.95) !important;
+  color: #0f172a !important;
+}
+
+/* Ensure shadows on white cards look incredibly modern & soft */
+.shadow-2xl {
+  box-shadow: 0 10px 50px -12px rgba(234, 179, 8, 0.12) !important;
+}
+.border-brand-border {
+  border-color: #e2e8f0 !important;
+}
+
+/* Buttons with white text that are colored in yellow/neon must have black text for perfect readability */
+.bg-brand-neon, .bg-brand-purple, .bg-brand-purple-light {
+  color: #0f172a !important;
+}
+.bg-brand-neon *, .bg-brand-purple *, .bg-brand-purple-light * {
+  color: #0f172a !important;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+::-webkit-scrollbar-thumb {
+  background: #facc15;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #eab308;
+}
+
+/* Print CSS */
+@media print {
+  html, body {
+    width: 210mm;
+    height: 297mm;
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11px !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+  
+  .print-only {
+    display: block !important;
+  }
+
+  .print-page {
+    width: 210mm;
+    height: 297mm;
+    padding: 8mm 6mm;
+    margin: 0;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start !important;
+    gap: 3.5mm !important;
+    page-break-after: always;
+    background: #ffffff !important;
+  }
+
+  /* 5 shipping labels per A4 page */
+  .print-label-card {
+    height: 54mm; /* Fits exactly 5 labels per page with small margins */
+    width: 100%;
+    border: 2px dashed #000000 !important;
+    border-radius: 0 !important;
+    margin-bottom: 2mm;
+    padding: 4mm !important;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    page-break-inside: avoid;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}
