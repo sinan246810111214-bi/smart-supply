@@ -1,0 +1,130 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "A catalog product representing inventory available for purchase.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the product"
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the product"
+        },
+        "description": {
+          "type": "string",
+          "description": "Description of the product"
+        },
+        "price": {
+          "type": "number",
+          "description": "Price of the product in INR"
+        },
+        "image": {
+          "type": "string",
+          "description": "Image URL of the product"
+        },
+        "category": {
+          "type": "string",
+          "description": "Category name"
+        },
+        "status": {
+          "type": "string",
+          "description": "Availability status of the product"
+        }
+      },
+      "required": ["id", "name", "price", "category", "status"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A customer order containing ordered items and shipment details.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier of the order"
+        },
+        "items": {
+          "type": "array",
+          "description": "Items in the order"
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "Total order amount in INR"
+        },
+        "name": {
+          "type": "string",
+          "description": "Customer name"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Customer phone number"
+        },
+        "pincode": {
+          "type": "string",
+          "description": "Customer address pin code"
+        },
+        "address": {
+          "type": "string",
+          "description": "Full shipping address"
+        },
+        "trackingNumber": {
+          "type": "string",
+          "description": "Postal tracking number"
+        },
+        "trackingStatus": {
+          "type": "string",
+          "description": "Current status of the shipment"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp when the order was placed"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Optional customer delivery notes"
+        },
+        "emailSent": {
+          "type": "boolean",
+          "description": "Whether confirmation email has been dispatched"
+        }
+      },
+      "required": ["id", "items", "totalAmount", "name", "phone", "pincode", "address", "trackingNumber", "trackingStatus", "createdAt"]
+    },
+    "AdminSettings": {
+      "title": "AdminSettings",
+      "description": "System configuration for Cloudinary and notifications.",
+      "type": "object",
+      "properties": {
+        "cloudinaryCloudName": {
+          "type": "string",
+          "description": "Cloudinary Cloud Name"
+        },
+        "cloudinaryPreset": {
+          "type": "string",
+          "description": "Cloudinary Upload Preset"
+        },
+        "emailNotificationsEnabled": {
+          "type": "boolean",
+          "description": "Enable email alerts for new orders"
+        }
+      },
+      "required": ["cloudinaryCloudName", "cloudinaryPreset", "emailNotificationsEnabled"]
+    }
+  },
+  "firestore": {
+    "products/{productId}": {
+      "schema": "Product",
+      "description": "Inventory product listings collection"
+    },
+    "orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer order listings collection"
+    },
+    "settings/{settingId}": {
+      "schema": "AdminSettings",
+      "description": "Application settings document"
+    }
+  }
+}

@@ -20,6 +20,51 @@ import {
   updateDoc
 } from "firebase/firestore";
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {}, // Backend executes requests on behalf of the application without an active client auth session
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+function checkAndHandlePermissionError(error: any, operationType: OperationType, path: string | null) {
+  const isPermissionError = error?.code === "permission-denied" || 
+                            (error instanceof Error && error.message.includes("permission"));
+  if (isPermissionError) {
+    handleFirestoreError(error, operationType, path);
+  }
+}
+
 const app = express();
 const PORT = 3000;
 
@@ -155,6 +200,7 @@ async function loadProducts(): Promise<Product[]> {
     // Sort products so newer IDs or custom order remains consistent
     return products.sort((a, b) => b.id.localeCompare(a.id));
   } catch (e) {
+    checkAndHandlePermissionError(e, OperationType.GET, "products");
     console.error("[Firestore] Error loading products:", e);
     // Local fallback
     try {
@@ -183,6 +229,7 @@ async function saveProducts(products: Product[]) {
       await setDoc(doc(firestoreDb, "products", prod.id), prod);
     }
   } catch (e) {
+    checkAndHandlePermissionError(e, OperationType.WRITE, "products");
     console.error("[Firestore] Error saving products:", e);
   }
   // Local backup
@@ -202,6 +249,7 @@ async function loadOrders(): Promise<Order[]> {
     // Sort by createdAt descending
     return orders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   } catch (e) {
+    checkAndHandlePermissionError(e, OperationType.GET, "orders");
     console.error("[Firestore] Error loading orders:", e);
     // Local fallback
     try {
@@ -222,6 +270,7 @@ async function saveOrders(orders: Order[]) {
       await setDoc(doc(firestoreDb, "orders", order.id), order);
     }
   } catch (e) {
+    checkAndHandlePermissionError(e, OperationType.WRITE, "orders");
     console.error("[Firestore] Error saving orders:", e);
   }
   // Local backup
@@ -234,6 +283,7 @@ async function saveOrder(order: Order) {
   try {
     await setDoc(doc(firestoreDb, "orders", order.id), order);
   } catch (e) {
+    checkAndHandlePermissionError(e, OperationType.WRITE, `orders/${order.id}`);
     console.error("[Firestore] Error saving order:", e);
   }
   // Sync backup list
@@ -260,6 +310,7 @@ async function loadSettings(): Promise<AdminSettings> {
     }
     return docSnap.data() as AdminSettings;
   } catch (e) {
+    checkAndHandlePermissionError(e, OperationType.GET, "settings/admin_settings");
     console.error("[Firestore] Error loading settings:", e);
     // Local fallback
     try {
@@ -279,6 +330,7 @@ async function saveSettings(settings: AdminSettings) {
   try {
     await setDoc(doc(firestoreDb, "settings", "admin_settings"), settings);
   } catch (e) {
+    checkAndHandlePermissionError(e, OperationType.WRITE, "settings/admin_settings");
     console.error("[Firestore] Error saving settings:", e);
   }
   // Local backup
@@ -553,6 +605,7 @@ app.delete("/api/orders/:id", checkAdmin, async (req, res) => {
 
     res.json({ success: true, message: "Order removed successfully" });
   } catch (e) {
+    checkAndHandlePermissionError(e, OperationType.DELETE, `orders/${id}`);
     res.status(500).json({ error: "Failed to delete order" });
   }
 });

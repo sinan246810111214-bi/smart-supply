@@ -343,6 +343,31 @@ export default function App() {
     return found ? found.quantity : 0;
   };
 
+  // Direct base64 browser image upload (Zero config needed, works everywhere)
+  const handleDirectBase64Upload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (file.size > 2 * 1024 * 1024) { // Limit to 2MB for Firestore/storage efficiency
+      alert("Please upload an image smaller than 2MB.");
+      return;
+    }
+
+    setIsUploadingImage(true);
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditingProduct((prev) => ({ ...prev, image: reader.result as string }));
+      setIsUploadingImage(false);
+      showBanner("Image uploaded directly via browser!", "success");
+    };
+    reader.onerror = () => {
+      alert("Failed to read image file.");
+      setIsUploadingImage(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Image Upload Handler using Cloudinary Client Integration or link input
   const handleCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -1252,17 +1277,75 @@ export default function App() {
                       {/* Multi-Order Label Printing Trigger */}
                       <div className="bg-brand-purple-dark/60 border border-brand-border p-3 rounded-xl flex flex-col lg:flex-row justify-between items-start lg:items-center gap-3">
                         <div className="text-xs text-brand-neon-light font-medium flex-1">
-                          Selected for printing: <span className="text-brand-neon font-black font-mono">{selectedPrintOrders.length}</span> orders
-                          {selectedPrintOrders.length > 0 && selectedPrintOrders.length !== 5 && (
-                            <span className="text-gray-400 text-[10px] ml-1 block">
-                              (Tip: exactly 5 orders fit perfectly onto one A4 sheet!)
+                          Selected for printing: <span className="text-brand-neon font-black font-mono text-[14px] bg-brand-purple/20 px-1.5 py-0.5 rounded">{selectedPrintOrders.length}</span> orders
+                          {selectedPrintOrders.length > 0 && selectedPrintOrders.length % 5 !== 0 && (
+                            <span className="text-gray-400 text-[10px] mt-1 block">
+                              (Tip: exactly 5 orders fit perfectly onto one A4 sheet. You have selected {selectedPrintOrders.length} orders which is {Math.ceil(selectedPrintOrders.length / 5)} sheets!)
                             </span>
                           )}
-                          {selectedPrintOrders.length === 5 && (
-                            <span className="text-brand-neon font-bold text-[10px] ml-1 block">
-                              🎯 Optimal 5/5 labels sheet load achieved!
+                          {selectedPrintOrders.length > 0 && selectedPrintOrders.length % 5 === 0 && (
+                            <span className="text-brand-neon font-bold text-[10px] mt-1 block">
+                              🎯 Optimal {selectedPrintOrders.length / 5}/{selectedPrintOrders.length / 5} full sheets load achieved! ({selectedPrintOrders.length} labels)
                             </span>
                           )}
+                        </div>
+
+                        {/* Quick Batch Selection Actions */}
+                        <div className="flex flex-wrap gap-1.5 bg-brand-dark p-1 rounded-lg border border-brand-border/60">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const allIds = filteredAdminOrders.map(o => o.id);
+                              setSelectedPrintOrders(allIds);
+                              showBanner(`Selected all ${allIds.length} orders!`, "success");
+                            }}
+                            className="bg-brand-card hover:bg-brand-purple/20 text-gray-700 text-[10px] font-bold px-2 py-1 rounded border border-brand-border transition-all whitespace-nowrap"
+                          >
+                            All ({filteredAdminOrders.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const ids = filteredAdminOrders.slice(0, 5).map(o => o.id);
+                              setSelectedPrintOrders(ids);
+                              showBanner("Selected first 5 orders (1 Page)!", "success");
+                            }}
+                            className="bg-brand-card hover:bg-brand-purple/20 text-gray-700 text-[10px] font-bold px-2 py-1 rounded border border-brand-border transition-all"
+                          >
+                            Select 5
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const ids = filteredAdminOrders.slice(0, 10).map(o => o.id);
+                              setSelectedPrintOrders(ids);
+                              showBanner("Selected first 10 orders (2 Pages)!", "success");
+                            }}
+                            className="bg-brand-card hover:bg-brand-purple/20 text-gray-700 text-[10px] font-bold px-2 py-1 rounded border border-brand-border transition-all"
+                          >
+                            Select 10
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const ids = filteredAdminOrders.slice(0, 20).map(o => o.id);
+                              setSelectedPrintOrders(ids);
+                              showBanner("Selected first 20 orders (4 Pages)!", "success");
+                            }}
+                            className="bg-brand-card hover:bg-brand-purple/20 text-gray-700 text-[10px] font-bold px-2 py-1 rounded border border-brand-border transition-all"
+                          >
+                            Select 20
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedPrintOrders([]);
+                              showBanner("Cleared printing selection", "info");
+                            }}
+                            className="bg-brand-card hover:bg-red-50 text-red-600 text-[10px] font-bold px-2 py-1 rounded border border-brand-border transition-all"
+                          >
+                            Clear
+                          </button>
                         </div>
 
                         {/* A4 Print Layout Orientation Toggle */}
@@ -1297,7 +1380,6 @@ export default function App() {
                             disabled={selectedPrintOrders.length === 0}
                             onClick={() => {
                               setIsPrintLayoutOpen(true);
-                              setTimeout(() => window.print(), 300);
                             }}
                             className="flex-1 lg:flex-initial flex items-center justify-center gap-1.5 bg-brand-neon text-brand-dark text-xs font-black px-4 py-2 rounded-lg uppercase tracking-wider disabled:opacity-40 transition whitespace-nowrap"
                           >
@@ -2036,19 +2118,28 @@ export default function App() {
               <div className="space-y-2 border border-brand-border/60 p-3 rounded bg-brand-dark/40">
                 <div className="text-[10px] text-brand-neon font-bold uppercase font-mono">Product Visual Media Asset</div>
                 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <div>
-                    <label className="block text-gray-500 mb-1 text-[9px]">Method 1: Cloudinary Upload</label>
+                    <label className="block text-gray-500 mb-1 text-[9px]">Method 1: Local Upload (Quick & Simple)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleDirectBase64Upload}
+                      className="w-full text-[10px] text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-brand-purple file:text-brand-neon hover:file:bg-brand-purple-light cursor-pointer"
+                    />
+                    {isUploadingImage && <span className="text-[9px] text-brand-neon animate-pulse">Processing image...</span>}
+                  </div>
+                  <div>
+                    <label className="block text-gray-500 mb-1 text-[9px]">Method 2: Cloudinary Upload</label>
                     <input
                       type="file"
                       accept="image/*"
                       onChange={handleCloudinaryUpload}
                       className="w-full text-[10px] text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-brand-purple file:text-brand-neon hover:file:bg-brand-purple-light cursor-pointer"
                     />
-                    {isUploadingImage && <span className="text-[9px] text-brand-neon animate-pulse">Uploading file...</span>}
                   </div>
                   <div>
-                    <label className="block text-gray-500 mb-1 text-[9px]">Method 2: Directly insert image URL</label>
+                    <label className="block text-gray-500 mb-1 text-[9px]">Method 3: Directly insert image URL</label>
                     <input
                       type="text"
                       placeholder="https://..."
@@ -2276,6 +2367,150 @@ export default function App() {
               ` : ""}
             }
           ` }} />
+
+          {/* Screen-only Interactive Print Preview Modal overlay */}
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/90 backdrop-blur-sm no-print flex flex-col items-center py-6 px-4">
+            <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col">
+              
+              {/* Modal Header */}
+              <div className="bg-slate-950 text-white px-6 py-4 flex flex-wrap justify-between items-center gap-4 border-b border-gray-800">
+                <div>
+                  <h3 className="font-display font-extrabold text-base tracking-tight flex items-center gap-2">
+                    <span className="text-brand-neon">📄</span> A4 Label Sheet Print Preview ({printOrientation})
+                  </h3>
+                  <p className="text-xs text-gray-400">
+                    Assembled <span className="text-brand-neon font-bold font-mono text-sm">{selectedPrintOrders.length}</span> labels into <span className="text-brand-neon font-bold font-mono text-sm">{Math.ceil(selectedPrintOrders.length / 5)}</span> A4 Sheets (5 labels per page)
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setTimeout(() => window.print(), 100);
+                    }}
+                    className="bg-brand-neon hover:bg-brand-neon-light text-brand-dark px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 shadow-lg shadow-brand-neon/10"
+                  >
+                    <Printer className="w-4 h-4" /> Print / Save A4 PDF
+                  </button>
+                  <button
+                    onClick={() => setIsPrintLayoutOpen(false)}
+                    className="bg-slate-800 hover:bg-slate-700 text-gray-300 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+                  >
+                    Close Preview
+                  </button>
+                </div>
+              </div>
+
+              {/* PDF Settings Tutorial Banner */}
+              <div className="bg-amber-50/90 border-b border-amber-200 p-4 text-xs text-amber-950">
+                <div className="flex gap-2">
+                  <span className="text-base">💡</span>
+                  <div className="space-y-1">
+                    <p className="font-bold">Simple Step-by-Step PDF Download & Share Instructions:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-900 leading-relaxed">
+                      <li>Click the gold <strong>"Print / Save A4 PDF"</strong> button above.</li>
+                      <li>In the print screen, change <strong>Destination</strong> to <strong>"Save as PDF"</strong> (or Microsoft Print to PDF).</li>
+                      <li>Under <em>More Settings</em>: Ensure <strong>Paper Size is A4</strong>, Margins is <strong>Default (or None)</strong>, and check <strong>Background graphics</strong> to keep designs clean.</li>
+                      <li>Click <strong>Save</strong> to get your clean PDF! You can now easily share it on WhatsApp, email, or print directly on A4 sheets.</li>
+                    </ul>
+                    {window.self !== window.top && (
+                      <div className="bg-red-50 text-red-700 font-bold border border-red-200 p-2 rounded mt-2 text-[10px] flex items-center gap-1">
+                        ⚠️ <strong>Notice:</strong> You are in a preview frame. If printing does not launch, click the "Open in new tab" icon at the top right of the screen first!
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Miniature A4 Pages List Mockup on screen */}
+              <div className="p-6 bg-slate-100 max-h-[60vh] overflow-y-auto space-y-8 flex flex-col items-center">
+                {(() => {
+                  const printableOrders = adminOrders.filter((o) => selectedPrintOrders.includes(o.id));
+                  const pages: Order[][] = [];
+                  for (let i = 0; i < printableOrders.length; i += 5) {
+                    pages.push(printableOrders.slice(i, i + 5));
+                  }
+
+                  return pages.map((pageOrders, pageIdx) => (
+                    <div key={pageIdx} className="w-full max-w-[210mm] bg-white shadow-lg border border-gray-300 p-6 space-y-4 rounded-lg relative text-black">
+                      <div className="absolute top-3 left-3 bg-slate-900 text-white text-[9px] font-bold font-mono px-2 py-0.5 rounded shadow z-10">
+                        SHEET {pageIdx + 1} OF {pages.length} ({pageOrders.length} labels)
+                      </div>
+                      
+                      <div className={`space-y-3 pt-6 ${printOrientation === "landscape" ? "grid grid-cols-2 gap-4 space-y-0" : ""}`}>
+                        {pageOrders.map((order) => (
+                          <div key={order.id} className="border-2 border-dashed border-gray-400 p-3.5 flex flex-col justify-between text-[11px] font-mono rounded bg-slate-50">
+                            {/* Header */}
+                            <div className="flex justify-between items-start border-b border-gray-300 pb-1.5 mb-1.5">
+                              <div>
+                                <h4 className="font-bold text-[10px] tracking-tight uppercase text-slate-800">SMARTSUPPLY INDIA POST LOGISTICS</h4>
+                                <span className="text-[8px] block text-gray-500">Express Cash-on-Delivery Label</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="border border-slate-800 font-bold px-1.5 py-0.2 text-[9px] text-slate-800 rounded">COD</span>
+                              </div>
+                            </div>
+
+                            {/* Addresses grid */}
+                            <div className="grid grid-cols-2 gap-2 my-1 text-slate-700">
+                              <div className="border-r border-gray-300 pr-2">
+                                <span className="text-[7px] font-bold block text-gray-500">SENDER (FROM):</span>
+                                <p className="font-bold text-[9px] text-slate-800">{FROM_ADDRESS.name}</p>
+                                <p className="text-[8px] leading-tight">{FROM_ADDRESS.address}, {FROM_ADDRESS.cityState}</p>
+                                <p className="text-[8px]">Ph: {FROM_ADDRESS.phone}</p>
+                              </div>
+                              <div className="pl-2">
+                                <span className="text-[7px] font-bold block text-gray-500">RECIPIENT (TO):</span>
+                                <p className="font-bold text-[9px] text-slate-900 uppercase underline">{order.name}</p>
+                                <p className="text-[8px] leading-snug">{order.address}</p>
+                                <p className="font-bold text-[8px] mt-0.5">PIN: {order.pincode}</p>
+                                <p className="font-bold text-[8px]">Ph: {order.phone}</p>
+                              </div>
+                            </div>
+
+                            {/* Footer info */}
+                            <div className="border-t border-gray-300 pt-1.5 flex justify-between items-center text-[9px] text-slate-800">
+                              <div>
+                                <span className="font-bold block text-[8px]">ORDER: {order.id}</span>
+                                <span className="text-[7px] text-gray-500">Items: {order.items.map((it) => `${it.productName} (x${it.quantity})`).join(", ")}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold block text-[10px]">TOTAL: ₹{order.totalAmount.toLocaleString()}</span>
+                                <span className="text-[8px] font-bold block bg-slate-800 text-white px-1.5 py-0.2 mt-0.5 tracking-wider font-mono">
+                                  {order.trackingNumber}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+
+              {/* Modal Footer Controls */}
+              <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-gray-200">
+                <button
+                  onClick={() => setIsPrintLayoutOpen(false)}
+                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold px-4 py-2 rounded-xl text-xs transition"
+                >
+                  Cancel & Exit
+                </button>
+                <button
+                  onClick={() => {
+                    setTimeout(() => window.print(), 100);
+                  }}
+                  className="bg-brand-neon hover:bg-brand-neon-light text-brand-dark px-5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                >
+                  Open Print / Save PDF 🖨️
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+          {/* This is the hidden block configured specifically for physical printing and PDF compiling */}
           <div className="print-only hidden">
             {/* Assemble orders into groups of 5 */}
             {(() => {
@@ -2341,20 +2576,10 @@ export default function App() {
 
                   </div>
                 ))}
-
-                {/* Print cancel control in web screen (just safety layer) */}
-                <div className="no-print mt-4 text-center">
-                  <button
-                    onClick={() => setIsPrintLayoutOpen(false)}
-                    className="bg-brand-neon text-brand-dark px-4 py-2 rounded"
-                  >
-                    Close Print Preview
-                  </button>
-                </div>
               </div>
-            ));
-          })()}
-        </div>
+              ));
+            })()}
+          </div>
         </>
       )}
 
