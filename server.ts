@@ -6,6 +6,8 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
+import crypto from "crypto";
+import nodemailer from "nodemailer";
 import { createServer as createViteServer } from "vite";
 import { Product, Order, AdminSettings } from "./src/types";
 import { initializeApp } from "firebase/app";
@@ -69,7 +71,7 @@ const app = express();
 const PORT = 3000;
 
 // Body parsing
-app.use(express.json());
+app.use(express.json({ limit: "20mb" }));
 
 // Firebase configuration loading from firebase-applet-config.json
 const CONFIG_FILE = path.join(process.cwd(), "firebase-applet-config.json");
@@ -297,9 +299,14 @@ async function saveOrder(order: Order) {
 
 async function loadSettings(): Promise<AdminSettings> {
   const defaultSettings: AdminSettings = {
-    cloudinaryCloudName: "",
+    cloudinaryCloudName: "xgkuinaj",
     cloudinaryPreset: "",
-    emailNotificationsEnabled: true
+    cloudinaryApiKey: "914875423422865",
+    cloudinaryApiSecret: "8xODTzAoAH_h3cUG-A76_oPdmeE",
+    emailNotificationsEnabled: true,
+    notificationEmail: "dm8115589@gmail.com",
+    smtpUser: "dm8115589@gmail.com",
+    smtpPass: "zfqm cqdl obwu jsew"
   };
   try {
     const docRef = doc(firestoreDb, "settings", "admin_settings");
@@ -308,7 +315,17 @@ async function loadSettings(): Promise<AdminSettings> {
       await setDoc(docRef, defaultSettings);
       return defaultSettings;
     }
-    return docSnap.data() as AdminSettings;
+    const data = docSnap.data() as any;
+    return {
+      cloudinaryCloudName: data.cloudinaryCloudName || defaultSettings.cloudinaryCloudName,
+      cloudinaryPreset: data.cloudinaryPreset || defaultSettings.cloudinaryPreset,
+      cloudinaryApiKey: data.cloudinaryApiKey || defaultSettings.cloudinaryApiKey,
+      cloudinaryApiSecret: data.cloudinaryApiSecret || defaultSettings.cloudinaryApiSecret,
+      emailNotificationsEnabled: data.emailNotificationsEnabled !== undefined ? data.emailNotificationsEnabled : defaultSettings.emailNotificationsEnabled,
+      notificationEmail: data.notificationEmail || defaultSettings.notificationEmail,
+      smtpUser: data.smtpUser || defaultSettings.smtpUser,
+      smtpPass: data.smtpPass || defaultSettings.smtpPass
+    };
   } catch (e) {
     checkAndHandlePermissionError(e, OperationType.GET, "settings/admin_settings");
     console.error("[Firestore] Error loading settings:", e);
@@ -319,7 +336,17 @@ async function loadSettings(): Promise<AdminSettings> {
         return defaultSettings;
       }
       const data = fs.readFileSync(SETTINGS_FILE, "utf-8");
-      return JSON.parse(data);
+      const parsed = JSON.parse(data) as any;
+      return {
+        cloudinaryCloudName: parsed.cloudinaryCloudName || defaultSettings.cloudinaryCloudName,
+        cloudinaryPreset: parsed.cloudinaryPreset || defaultSettings.cloudinaryPreset,
+        cloudinaryApiKey: parsed.cloudinaryApiKey || defaultSettings.cloudinaryApiKey,
+        cloudinaryApiSecret: parsed.cloudinaryApiSecret || defaultSettings.cloudinaryApiSecret,
+        emailNotificationsEnabled: parsed.emailNotificationsEnabled !== undefined ? parsed.emailNotificationsEnabled : defaultSettings.emailNotificationsEnabled,
+        notificationEmail: parsed.notificationEmail || defaultSettings.notificationEmail,
+        smtpUser: parsed.smtpUser || defaultSettings.smtpUser,
+        smtpPass: parsed.smtpPass || defaultSettings.smtpPass
+      };
     } catch (err) {
       return defaultSettings;
     }
@@ -337,6 +364,43 @@ async function saveSettings(settings: AdminSettings) {
   try {
     fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
   } catch (e) {}
+}
+
+async function sendRealEmail(subject: string, text: string) {
+  try {
+    const settings = await loadSettings();
+    if (!settings.emailNotificationsEnabled) {
+      console.log("[Email] Real email sending skipped (notifications disabled in settings).");
+      return;
+    }
+
+    const smtpUser = settings.smtpUser || "dm8115589@gmail.com";
+    const smtpPassRaw = settings.smtpPass || "zfqm cqdl obwu jsew";
+    const smtpPass = smtpPassRaw.replace(/\s+/g, ""); // strip any spaces from the app password
+    const recipient = settings.notificationEmail || "dm8115589@gmail.com";
+
+    console.log(`[Email] Preparing Nodemailer transport with Gmail SMTP. Sender: ${smtpUser}, Recipient: ${recipient}`);
+
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
+
+    const mailOptions = {
+      from: `"SmartSupply Notification" <${smtpUser}>`,
+      to: recipient,
+      subject: subject,
+      text: text
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log("[Email] Real email sent successfully. MessageId:", info.messageId);
+  } catch (error) {
+    console.error("[Email Error] Failed to send real email via Nodemailer:", error);
+  }
 }
 
 // Order Notifications Real-time Stream
@@ -524,6 +588,9 @@ SmartSupply Automated System
     date: new Date().toISOString()
   });
 
+  // Dispatch real email via Gmail SMTP
+  sendRealEmail(`[New Order Alert] Order ID: ${newOrder.id} - ₹${newOrder.totalAmount}`, emailBody);
+
   console.log(`[Email Dispatch] Email dispatched to smartsupply36@gmail.com for Order ${newOrder.id}`);
 
   res.status(201).json({
@@ -616,17 +683,73 @@ app.get("/api/settings", async (req, res) => {
 });
 
 app.post("/api/settings", checkAdmin, async (req, res) => {
-  const { cloudinaryCloudName, cloudinaryPreset, emailNotificationsEnabled } = req.body;
+  const { cloudinaryCloudName, cloudinaryPreset, cloudinaryApiKey, cloudinaryApiSecret, emailNotificationsEnabled, notificationEmail, smtpUser, smtpPass } = req.body;
   const settings = await loadSettings();
 
   const newSettings = {
     cloudinaryCloudName: cloudinaryCloudName !== undefined ? cloudinaryCloudName : settings.cloudinaryCloudName,
     cloudinaryPreset: cloudinaryPreset !== undefined ? cloudinaryPreset : settings.cloudinaryPreset,
-    emailNotificationsEnabled: emailNotificationsEnabled !== undefined ? emailNotificationsEnabled : settings.emailNotificationsEnabled
+    cloudinaryApiKey: cloudinaryApiKey !== undefined ? cloudinaryApiKey : settings.cloudinaryApiKey,
+    cloudinaryApiSecret: cloudinaryApiSecret !== undefined ? cloudinaryApiSecret : settings.cloudinaryApiSecret,
+    emailNotificationsEnabled: emailNotificationsEnabled !== undefined ? emailNotificationsEnabled : settings.emailNotificationsEnabled,
+    notificationEmail: notificationEmail !== undefined ? notificationEmail : settings.notificationEmail,
+    smtpUser: smtpUser !== undefined ? smtpUser : settings.smtpUser,
+    smtpPass: smtpPass !== undefined ? smtpPass : settings.smtpPass
   };
 
   await saveSettings(newSettings);
   res.json(newSettings);
+});
+
+// Secure Server-side Cloudinary Upload Endpoint
+app.post("/api/upload-image", async (req, res) => {
+  try {
+    const { file } = req.body; // base64 string
+    if (!file) {
+      return res.status(400).json({ error: "No file provided" });
+    }
+
+    const settings = await loadSettings();
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME || settings.cloudinaryCloudName || "xgkuinaj";
+    const apiKey = process.env.CLOUDINARY_API_KEY || settings.cloudinaryApiKey || "914875423422865";
+    const apiSecret = process.env.CLOUDINARY_API_SECRET || settings.cloudinaryApiSecret || "8xODTzAoAH_h3cUG-A76_oPdmeE";
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      return res.status(400).json({ error: "Cloudinary configuration is missing cloudName, apiKey, or apiSecret." });
+    }
+
+    const timestamp = Math.round(new Date().getTime() / 1000);
+    const stringToSign = `timestamp=${timestamp}${apiSecret}`;
+    const signature = crypto.createHash("sha1").update(stringToSign).digest("hex");
+
+    const bodyParams = new URLSearchParams();
+    bodyParams.append("file", file);
+    bodyParams.append("api_key", apiKey);
+    bodyParams.append("timestamp", timestamp.toString());
+    bodyParams.append("signature", signature);
+
+    const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`;
+    
+    const response = await fetch(cloudinaryUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: bodyParams.toString(),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("[Cloudinary Server Upload Error]:", errText);
+      return res.status(response.status).json({ error: `Cloudinary API error: ${errText}` });
+    }
+
+    const data = await response.json();
+    return res.json({ secure_url: data.secure_url });
+  } catch (error: any) {
+    console.error("[Upload Error]:", error);
+    return res.status(500).json({ error: error?.message || "Internal server error during upload" });
+  }
 });
 
 // 7. Simulated Emails logs for SmartSupply Admin

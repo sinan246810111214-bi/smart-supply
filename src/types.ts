@@ -38,5 +38,10 @@ export interface Order {
 export interface AdminSettings {
   cloudinaryCloudName: string;
   cloudinaryPreset: string;
+  cloudinaryApiKey?: string;
+  cloudinaryApiSecret?: string;
   emailNotificationsEnabled: boolean;
+  notificationEmail?: string;
+  smtpUser?: string;
+  smtpPass?: string;
 }

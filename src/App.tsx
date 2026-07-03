@@ -93,9 +93,14 @@ export default function App() {
 
   // Cloudinary credentials & settings
   const [settings, setSettings] = useState<AdminSettings>({
-    cloudinaryCloudName: "",
+    cloudinaryCloudName: "xgkuinaj",
     cloudinaryPreset: "",
-    emailNotificationsEnabled: true
+    cloudinaryApiKey: "914875423422865",
+    cloudinaryApiSecret: "8xODTzAoAH_h3cUG-A76_oPdmeE",
+    emailNotificationsEnabled: true,
+    notificationEmail: "dm8115589@gmail.com",
+    smtpUser: "dm8115589@gmail.com",
+    smtpPass: "zfqm cqdl obwu jsew"
   });
 
   // Simulated Admin Email inbox logs
@@ -360,6 +365,51 @@ export default function App() {
       setEditingProduct((prev) => ({ ...prev, image: reader.result as string }));
       setIsUploadingImage(false);
       showBanner("Image uploaded directly via browser!", "success");
+    };
+    reader.onerror = () => {
+      alert("Failed to read image file.");
+      setIsUploadingImage(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Secure Server-side Image Upload using pre-configured Cloudinary (No Preset Needed)
+  const handleServerCloudinaryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (file.size > 8 * 1024 * 1024) { // Limit to 8MB
+      alert("Please upload an image smaller than 8MB.");
+      return;
+    }
+
+    setIsUploadingImage(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        const base64data = reader.result as string;
+        const res = await fetch("/api/upload-image", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ file: base64data }),
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setEditingProduct((prev) => ({ ...prev, image: data.secure_url }));
+          showBanner("Image uploaded successfully via Secure Cloudinary API!", "success");
+        } else {
+          const errData = await res.json();
+          alert(`Server Upload error: ${errData.error || "Failed to upload"}`);
+        }
+      } catch (err) {
+        alert("Failed to connect to server upload API.");
+      } finally {
+        setIsUploadingImage(false);
+      }
     };
     reader.onerror = () => {
       alert("Failed to read image file.");
@@ -1686,7 +1736,7 @@ export default function App() {
                     <div className="bg-brand-card border border-brand-border rounded-2xl p-4 md:p-6 space-y-4">
                       <div>
                         <h3 className="font-display font-extrabold text-base text-white">⚡ Integration API Settings</h3>
-                        <p className="text-[11px] text-gray-400">Add credentials for uploading files directly via Cloudinary</p>
+                        <p className="text-[11px] text-gray-400">Add credentials for uploading files directly via Cloudinary. Method 2 (Secure Cloudinary) runs server-side and does not require an upload preset!</p>
                       </div>
 
                       <div className="space-y-3 text-xs">
@@ -1701,10 +1751,30 @@ export default function App() {
                           />
                         </div>
                         <div>
-                          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Cloudinary Upload Preset</label>
+                          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Cloudinary API Key</label>
                           <input
                             type="text"
-                            placeholder="e.g. smartsupply-preset"
+                            placeholder="e.g. 1234567890"
+                            value={settings.cloudinaryApiKey || ""}
+                            onChange={(e) => setSettings((prev) => ({ ...prev, cloudinaryApiKey: e.target.value }))}
+                            className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Cloudinary API Secret</label>
+                          <input
+                            type="password"
+                            placeholder="e.g. secret-key"
+                            value={settings.cloudinaryApiSecret || ""}
+                            onChange={(e) => setSettings((prev) => ({ ...prev, cloudinaryApiSecret: e.target.value }))}
+                            className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Cloudinary Upload Preset (Only for Client-side Method 3)</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. smartsupply-preset (unsigned)"
                             value={settings.cloudinaryPreset}
                             onChange={(e) => setSettings((prev) => ({ ...prev, cloudinaryPreset: e.target.value }))}
                             className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-white"
@@ -1716,6 +1786,66 @@ export default function App() {
                           className="w-full bg-brand-purple hover:bg-brand-purple-light text-brand-neon font-extrabold py-2 rounded-lg transition text-xs tracking-wider"
                         >
                           SAVE CONFIGURATION
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Gmail SMTP & Notification Settings panel */}
+                    <div className="bg-brand-card border border-brand-border rounded-2xl p-4 md:p-6 space-y-4">
+                      <div>
+                        <h3 className="font-display font-extrabold text-base text-white">📧 Real Email Notification Settings</h3>
+                        <p className="text-[11px] text-gray-400">Receive actual order notification emails instantly on checkout using Gmail SMTP.</p>
+                      </div>
+
+                      <div className="space-y-3 text-xs">
+                        <div className="flex items-center justify-between p-2 rounded-lg bg-brand-dark/40 border border-brand-border/30">
+                          <div>
+                            <span className="block text-xs font-bold text-white">Enable Email Dispatcher</span>
+                            <span className="text-[9px] text-gray-400">Turn on/off real SMTP email notifications</span>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={settings.emailNotificationsEnabled}
+                            onChange={(e) => setSettings((prev) => ({ ...prev, emailNotificationsEnabled: e.target.checked }))}
+                            className="w-4 h-4 text-brand-neon rounded focus:ring-brand-neon"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Recipient Email Address</label>
+                          <input
+                            type="email"
+                            placeholder="e.g. your-email@gmail.com"
+                            value={settings.notificationEmail || ""}
+                            onChange={(e) => setSettings((prev) => ({ ...prev, notificationEmail: e.target.value }))}
+                            className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Gmail SMTP Username (Sender)</label>
+                          <input
+                            type="email"
+                            placeholder="e.g. sender-email@gmail.com"
+                            value={settings.smtpUser || ""}
+                            onChange={(e) => setSettings((prev) => ({ ...prev, smtpUser: e.target.value }))}
+                            className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase font-bold text-gray-400 mb-1">Gmail App Password (16-char)</label>
+                          <input
+                            type="password"
+                            placeholder="e.g. abcd efgh ijkl mnop"
+                            value={settings.smtpPass || ""}
+                            onChange={(e) => setSettings((prev) => ({ ...prev, smtpPass: e.target.value }))}
+                            className="w-full bg-brand-dark border border-brand-border rounded-lg px-3 py-2 text-white"
+                          />
+                        </div>
+
+                        <button
+                          onClick={saveSettingsConfig}
+                          className="w-full bg-brand-purple hover:bg-brand-purple-light text-brand-neon font-extrabold py-2 rounded-lg transition text-xs tracking-wider"
+                        >
+                          SAVE EMAIL CONFIGURATION
                         </button>
                       </div>
                     </div>
@@ -2114,38 +2244,29 @@ export default function App() {
                 </select>
               </div>
 
-              {/* Dynamic Image Upload Widget using Cloudinary API or Image URL fallback */}
+              {/* Dynamic Image Upload Widget using Cloudinary API or ImgBB/Hosting Link */}
               <div className="space-y-2 border border-brand-border/60 p-3 rounded bg-brand-dark/40">
                 <div className="text-[10px] text-brand-neon font-bold uppercase font-mono">Product Visual Media Asset</div>
                 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-gray-500 mb-1 text-[9px]">Method 1: Local Upload (Quick & Simple)</label>
+                    <label className="block text-brand-neon mb-1 text-[9px] font-bold">📷 Cloudinary Secure Upload</label>
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleDirectBase64Upload}
-                      className="w-full text-[10px] text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-brand-purple file:text-brand-neon hover:file:bg-brand-purple-light cursor-pointer"
+                      onChange={handleServerCloudinaryUpload}
+                      className="w-full text-[10px] text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-brand-neon file:text-brand-dark hover:file:bg-brand-neon-light cursor-pointer"
                     />
-                    {isUploadingImage && <span className="text-[9px] text-brand-neon animate-pulse">Processing image...</span>}
+                    {isUploadingImage && <span className="text-[9px] text-brand-neon animate-pulse block mt-1">Uploading...</span>}
                   </div>
                   <div>
-                    <label className="block text-gray-500 mb-1 text-[9px]">Method 2: Cloudinary Upload</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleCloudinaryUpload}
-                      className="w-full text-[10px] text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:font-semibold file:bg-brand-purple file:text-brand-neon hover:file:bg-brand-purple-light cursor-pointer"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-gray-500 mb-1 text-[9px]">Method 3: Directly insert image URL</label>
+                    <label className="block text-gray-400 mb-1 text-[9px] font-bold">🔗 ImgBB or Image Hosting Link</label>
                     <input
                       type="text"
-                      placeholder="https://..."
+                      placeholder="e.g. https://i.ibb.co/..."
                       value={editingProduct.image || ""}
                       onChange={(e) => setEditingProduct((prev) => ({ ...prev, image: e.target.value }))}
-                      className="w-full bg-brand-dark border border-brand-border rounded px-2 py-1 text-white text-[11px]"
+                      className="w-full bg-brand-dark border border-brand-border rounded px-2 py-1.5 text-white text-[11px]"
                     />
                   </div>
                 </div>
