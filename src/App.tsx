@@ -103,6 +103,16 @@ export default function App() {
     smtpPass: "zfqm cqdl obwu jsew"
   });
 
+  // Searched Order IDs Tracking History (last 5)
+  const [searchedOrders, setSearchedOrders] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("smartsupply_searched_orders");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
   // Simulated Admin Email inbox logs
   const [adminEmails, setAdminEmails] = useState<any[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<any | null>(null);
@@ -497,20 +507,32 @@ export default function App() {
     }
   };
 
-  // Search/Track order from India Post format
-  const handleTrackOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!trackingQuery.trim()) return;
+  // Core Tracking search function
+  const trackOrder = async (queryStr: string) => {
+    const trimmed = queryStr.trim();
+    if (!trimmed) return;
 
     setTrackingLoading(true);
     setTrackingError("");
     setTrackingResult(null);
 
     try {
-      const res = await fetch(`/api/orders/${trackingQuery.trim()}`);
+      const res = await fetch(`/api/orders/${trimmed}`);
       if (res.ok) {
         const data = await res.json();
         setTrackingResult(data);
+        
+        // Save the successful searched Order ID to history (last 5, unique, newest first)
+        if (data.id) {
+          setSearchedOrders((prev) => {
+            const filtered = prev.filter((id) => id !== data.id);
+            const updated = [data.id, ...filtered].slice(0, 5);
+            try {
+              localStorage.setItem("smartsupply_searched_orders", JSON.stringify(updated));
+            } catch (e) {}
+            return updated;
+          });
+        }
       } else {
         setTrackingError("No order or tracking details found for this input.");
       }
@@ -519,6 +541,17 @@ export default function App() {
     } finally {
       setTrackingLoading(false);
     }
+  };
+
+  // Search/Track order from India Post format
+  const handleTrackOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    trackOrder(trackingQuery);
+  };
+
+  const handleQuickTrack = (orderId: string) => {
+    setTrackingQuery(orderId);
+    trackOrder(orderId);
   };
 
   // Authenticate Admin
@@ -1039,6 +1072,38 @@ export default function App() {
                   {trackingLoading ? "Retrieving Dispatch..." : "LOCATE CONSIGNMENT 🔎"}
                 </button>
               </form>
+
+              {/* Order History quick access */}
+              {searchedOrders.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-brand-border/40 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider font-mono">Order History</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchedOrders([]);
+                        localStorage.removeItem("smartsupply_searched_orders");
+                      }}
+                      className="text-[9px] text-red-400 hover:text-red-300 transition uppercase font-mono tracking-wider font-bold"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {searchedOrders.map((orderId) => (
+                      <button
+                        key={orderId}
+                        type="button"
+                        onClick={() => handleQuickTrack(orderId)}
+                        className="bg-brand-dark/80 hover:bg-brand-purple/40 border border-brand-border hover:border-brand-neon px-2.5 py-1 rounded text-[11px] font-mono text-gray-300 hover:text-white transition flex items-center gap-1"
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-brand-neon"></span>
+                        {orderId}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {trackingError && (
                 <div className="mt-4 p-3 bg-red-950/40 border border-red-900 rounded-lg text-red-400 text-xs flex items-center gap-2">
